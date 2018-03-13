@@ -27,24 +27,19 @@
 
 @property (nonatomic, assign) NSInteger cuurentIndex;
 
-@property (nonatomic, strong) NSTimer * scrollTimer;
-
 @property (nonatomic, assign) BOOL initialed;
 
 @property (nonatomic, assign) CGFloat lastOffset;
 
-/**纪录timer的值 38.188459297025602*/
-@property (nonatomic, assign) CGFloat timerGoing;
-
-@property (nonatomic, assign) BOOL isAutoScrollAnimating;
-
 @property (nonatomic, strong) CADisplayLink * autoScrollTimer;
-
-@property (nonatomic, assign) BOOL isItemTouched;
 
 /**每一帧增加的timergoing。- 这里使用sin函数进行*/
 @property (nonatomic, assign) CGFloat angelPerFrame;
 
+/**上一个偏移值所在的纪录*/
+@property (nonatomic, assign) NSUInteger lastRecordIndex;
+
+@property (nonatomic, assign) float * offCache;
 @end
 
 @implementation TTCycleScaner
@@ -55,9 +50,27 @@
         [self initialUI];
         self.scrllTimeSpace = 1;
         self.angelPerFrame = M_PI/60;
-        self.timerGoing = 0;
+        [self initialData];
     }
     return self;
+}
+
+- (void)initialData {
+    _offCache = malloc(sizeof(typeof(float))*60);//初始化60个
+    CGFloat totoal = 0;
+    for (int i = 0; i < 60; i ++) {
+        CGFloat angel = sin(_angelPerFrame*i);
+        totoal += angel;
+    }
+    
+    CGFloat alredyLen = 0;
+    for (int i = 0; i < 60; i ++) {
+        CGFloat angel = sin(_angelPerFrame*i);
+        CGFloat currentLen = angel / totoal;
+        alredyLen += currentLen;
+        _offCache[i]= alredyLen;
+        NSLog(@"the already len is %f",alredyLen);
+    }
 }
 
 
@@ -219,9 +232,6 @@
 
 - (void)scrollViewDidScroll:(UIScrollView *)scrollView {
     
-    if (self.scrollTimer) {//自动滚动中
-        return;
-    }
     CGPoint offset = scrollView.contentOffset;
     if (self.scrollDirection == TTCycleScanerDirectionHorizontal) {
         CGFloat velocyty = offset.x - self.lastOffset;
@@ -233,12 +243,11 @@
         }else {
             TTCycleScanItem *item = self.allItems.lastObject;
             if ([self isItemVisible:item]) {
-            [self leftScrollCheck];
+                [self leftScrollCheck];
             }
 
         }
         self.lastOffset = scrollView.contentOffset.x;
-        
         
     }else {
         
@@ -271,7 +280,7 @@
         for (int i = -1; i <2; i ++) {
              NSInteger dataindex = item.dataIndex + i-1;
             TTCycleScanItem *rItem =[self.delegate cycleScaner:self itemForIndex:dataindex];
-            if (!ritem) {
+            if (!rItem) {
                 return;
             }
             rItem.delegate = self;
@@ -329,7 +338,7 @@
         for (int i = -1; i <2; i ++) {
             NSInteger dataindex = item.dataIndex + i  + 1;
             TTCycleScanItem *rItem =[self.delegate cycleScaner:self itemForIndex:dataindex];
-            if (!ritem) {
+            if (!rItem) {
                 return;
             }
               rItem.delegate = self;
@@ -367,73 +376,93 @@
 #pragma mark - 自动播放
 
 - (void)startAutoScroll {
-    if (!self.scrollTimer) {
+    if (!self.autoScrollTimer) {
         self.pageControl.hidden = NO;
-        self.scrollTimer = [NSTimer timerWithTimeInterval:self.scrllTimeSpace target:self selector:@selector(scrollToNext:) userInfo:nil repeats:YES];
-        [[NSRunLoop currentRunLoop]addTimer:self.scrollTimer forMode:NSDefaultRunLoopMode];
-        [self.scrollTimer fire];
+        self.autoScrollTimer = [CADisplayLink displayLinkWithTarget:self selector:@selector(scrollToNext:)];
+        [self.autoScrollTimer addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
     }
-//    if (!self.autoScrollTimer) {
-//        self.pageControl.hidden = NO;
-//        self.autoScrollTimer = [CADisplayLink displayLinkWithTarget:self selector:@selector(scrollToNext:)];
-//        [self.autoScrollTimer addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSDefaultRunLoopMode];
-//    }
 }
 
 - (void)stopScroll {
-    [self.scrollTimer invalidate];
-    self.scrollTimer = nil;
+    [self.autoScrollTimer invalidate];
+    self.autoScrollTimer = nil;
 }
 
 - (void)scrollToNext:(id)sender {
-    
-//    if (self.isItemTouched) {
-//        return;
-//    }
+
     CGFloat width = CGRectGetWidth(self.bounds);
-    CGPoint offset = self.scrollView.contentOffset;
-    self.isAutoScrollAnimating = YES;
-//    self.scrollView setContentOffset:<#(CGPoint)#> animated:<#(BOOL)#>
-//
-    [UIView animateWithDuration:self.scrllTimeSpace-0.1 delay:0 options:UIViewAnimationCurveEaseOut | UIViewAnimationOptionAllowUserInteraction animations:^{
-         self.scrollView.contentOffset = CGPointMake(offset.x + width, 0);
-    } completion:^(BOOL finished) {
-        self.isAutoScrollAnimating = NO;
-        [self pageScroolLeftCheck:self.scrollView];
-//        [self scrollViewDidScroll:self.scrollView];
-    }];
+
+    //找到当前在整数倍之外偏移了多少
+    CGFloat currentOff = self.scrollView.contentOffset.x;
+    currentOff = fmodf(currentOff, width);
     
-//     CGFloat width = CGRectGetWidth(self.bounds);
-//    //考虑到被手拖动的情况
-//
-//    CGFloat currentOff = self.scrollView.contentOffset.x;
-//    currentOff = fmod(currentOff, width);
-//
-//    //这里使用sin 函数
-//
-//    CGFloat relativeWith = width / TTSCANSIXTYSIN;
-//    CGFloat angel = sin(self.timerGoing);
-//    CGFloat off = angel * relativeWith;
-//    self.scrollView.contentOffset = CGPointMake(self.scrollView.contentOffset.x + off, 0);
-//
-//    self.timerGoing += _angelPerFrame;
-//    if (self.timerGoing > M_PI) {//下一个循环
-//        self.timerGoing = _angelPerFrame;
-//        //这里对scroolview 进行对齐 防止出现小的误差
-//    }
+    //留下的整除部分
+    CGFloat divitinPart = self.scrollView.contentOffset.x - currentOff;
+    
+    //计算出这一个如果没有手动拖动的情况下应该偏移多少，并计算出新的偏移值
+    CGFloat lastOffPer = _offCache[_lastRecordIndex];
+    CGFloat lastOff = lastOffPer * width;
+    CGFloat newoff = 0;
+    
+    //判断当前的偏移值是否是正确的-连续的 如果连续那么 _lastRecordIndex 增加1 进入下一个偏移值的选取
+    if ([self isfloat:lastOff issameTofloat:currentOff] || [self isfloat:lastOff-width issameTofloat:currentOff]) {
+        _lastRecordIndex = ++_lastRecordIndex;
+        if (_lastRecordIndex >= 60) {
+            _lastRecordIndex = 0;
+        }
+        newoff = _offCache[_lastRecordIndex] * width;
+    }else {
+        //如果不连续 则通过2分查找-找到当前最接近的那个偏移值 并更新 _lastRecordIndex 到这个接近的值
+        CGFloat currentPer = currentOff/ width;
+        //当前最接近的一个偏移值
+        UInt16 currentCloseIndex = [self findF:currentPer atBegin:0 toEnd:60];
+        _lastRecordIndex = currentCloseIndex;
+         newoff = _offCache[currentCloseIndex] * width;
+    }
+
+    self.scrollView.contentOffset = CGPointMake(divitinPart + newoff, 0);
     
 }
 
-- (void)dealloc {
+//偏移量的最小为一个小数
+- (BOOL)isfloat:(float)a issameTofloat:(float)b {
 
+    CGFloat c = a - b;
+    c = fabs(c);
+    return c < 0.5;;
+    
 }
-/*
-// Only override drawRect: if you perform custom drawing.
-// An empty implementation adversely affects performance during animation.
-- (void)drawRect:(CGRect)rect {
-    // Drawing code
+
+//2分查找
+- (UInt16)findF:(CGFloat)f atBegin:(UInt16)start toEnd:(UInt16)end{
+    
+    if (start == end) {
+        return start;
+    }
+    
+    if (abs(start - end) == 1) {
+        float startF = _offCache[start] - f;
+        float endf = _offCache[end] - f;
+        startF = fabsf(startF);
+        endf = fabsf(endf);
+        return  startF <endf?start:end;
+    }
+    
+    int center = (start + end)/2;
+    
+    float centerValue = _offCache[center];
+    if (centerValue == f) {
+        return center;
+    }
+    
+    if (centerValue >f) {
+        return [self findF:f atBegin:start toEnd:center];
+    }else {
+        return [self findF:f atBegin:center toEnd:end];
+    }
+    
 }
-*/
+
 
 - (void)enQueenItem:(TTCycleScanItem *)item {
     NSMutableArray *array = [self.reuseItemQueue objectForKey:item.identifire];
@@ -474,18 +503,14 @@
     self.scrollView.pagingEnabled = pageEnable;
 }
 
-- (void)itemTouchBegin:(TTCycleScanItem *)item {
-    self.isItemTouched = YES;
-}
-
-- (void)itemTouchEnd:(TTCycleScanItem *)item {
-    self.isItemTouched = NO;
-}
-
 - (void)itemClicked:(TTCycleScanItem *)item {
     if ([self.delegate respondsToSelector:@selector(cycleScaner:didSelectItem:)]) {
         [self.delegate cycleScaner:self didSelectItem:item];
     }
+}
+
+- (void)dealloc {
+    free(_offCache);
 }
 
 @end
