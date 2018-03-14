@@ -370,14 +370,20 @@
     CGFloat lastOffPer = _offCache[_lastRecordIndex];
     CGFloat lastOff = lastOffPer * width;
     CGFloat newoff = 0;
+    NSLog(@"divipart is %f ",divitinPart);
     
     //判断当前的偏移值是否是正确的-连续的 如果连续那么 _lastRecordIndex 增加1 进入下一个偏移值的选取
-    if ([self isfloat:lastOff issameTofloat:currentOff] || [self isfloat:lastOff-width issameTofloat:currentOff]) {
+    if ([self isfloat:lastOff issameTofloat:currentOff]) {
         _lastRecordIndex = ++_lastRecordIndex;
         if (_lastRecordIndex >= _totoalPart) {
             _lastRecordIndex = 0;
+//            divitinPart += width;
         }
         newoff = _offCache[_lastRecordIndex] * width;
+         NSLog(@"newoff is %f ",newoff);
+    }else if ( [self isfloat:lastOff-width issameTofloat:currentOff]){//因为赋值给offset.x 会丢失精度 所以这里要对这种情况进行处理 如果在 _totoalPart -1 或者 _totoalPart -2 就已经是 一个宽度了 那就要从新计数了
+        _lastRecordIndex = 0;
+         newoff = _offCache[_lastRecordIndex] * width;
     }else {
         //如果不连续 则通过2分查找-找到当前最接近的那个偏移值 并更新 _lastRecordIndex 到这个接近的值
         CGFloat currentPer = currentOff/ width;
