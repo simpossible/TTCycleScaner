@@ -58,6 +58,7 @@
         make.width.equalTo(self.view.mas_width);
         make.height.mas_equalTo(100);
     }];
+    self.currentScaner.speed = 2;
     
     self.currentScaner.delegate = self;
     
@@ -73,7 +74,6 @@
     NSInteger count = self.datas.count;
     
     NSInteger i = (index % count + count)%count;
-    NSLog(@"dataindex is %ld",index);
     TTCycleScanItem *item = [scaner deqeenItemForReuseIdentifire:@"hehe"];
     if (!item) {
         item = [[TTCycleScanItem alloc] initWithReuseIdentifire:@"hehe"];
@@ -98,6 +98,10 @@
 
 - (void)cycleScaner:(TTCycleScaner *)scaner didSelectItem:(TTCycleScanItem *)item {
     NSLog(@"haha");
+}
+
+- (NSUInteger)numberOfPageForCycleScaner:(TTCycleScaner *)scaner {
+    return 5;
 }
 
 @end

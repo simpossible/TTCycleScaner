@@ -19,6 +19,9 @@ typedef NS_ENUM(NSUInteger,TTCycleScanerDirection) {
 
 @protocol TTCycleScanerProtocol <NSObject>
 
+/**为了表现pagecontrol*/
+- (NSUInteger)numberOfPageForCycleScaner:(TTCycleScaner *)scaner;
+
 - (TTCycleScanItem *)cycleScaner:(TTCycleScaner *)scaner itemForIndex:(NSInteger)index;
 
 - (void)cycleScaner:(TTCycleScaner *)scaner didSelectItem:(TTCycleScanItem *)item;
@@ -44,6 +47,8 @@ typedef NS_ENUM(NSUInteger,TTCycleScanerDirection) {
 
 /**是否支持翻页*/
 @property (nonatomic, assign) BOOL pageEnable;
+
+@property (nonatomic, assign) CGFloat speed;
 
 /**
  开始自动轮播-需要调用stopToScroll 保证释放
